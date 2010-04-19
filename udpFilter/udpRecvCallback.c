@@ -7,7 +7,7 @@
 #include <linux/inet.h>
 
 #define SERVER_PORT 5555
-static struct socket *udpsocket=NULL;
+static struct socket *recvsocket=NULL;
 static struct socket *clientsocket=NULL;
 
 static DECLARE_COMPLETION( threadcomplete );
@@ -72,30 +72,33 @@ static int __init server_init( void )
 {
 	struct sockaddr_in server;
 	int servererror;
-	printk("INIT MODULE\n");
-	/* socket to receive data */
-	if (sock_create(PF_INET, SOCK_DGRAM, IPPROTO_UDP, &udpsocket) < 0) {
-		printk( KERN_ERR "server: Error creating udpsocket.n" );
+	printk("Init of module udpRcvCallback \n");
+
+	/* Create a socket to receive data */
+	if (sock_create(PF_INET, SOCK_DGRAM, IPPROTO_UDP, &recvsocket) < 0) {
+		printk( KERN_ERR "server: Error creating recvsocket.n" );
 		return -EIO;
 	}
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = INADDR_ANY;
 	server.sin_port = htons( (unsigned short)SERVER_PORT);
-	servererror = udpsocket->ops->bind(udpsocket, (struct sockaddr *) &server, sizeof(server ));
+
+        /* Check something which I dind't understood */
+	servererror = recvsocket->ops->bind(recvsocket, (struct sockaddr *) &server, sizeof(server ));
 	if (servererror) {
-		sock_release(udpsocket);
+		sock_release(recvsocket);
 		return -EIO;
 	}
-	udpsocket->sk->sk_data_ready = cb_data;
-	
-	/* create work queue */	
+	recvsocket->sk->sk_data_ready = cb_data;
+
+	/* create work queue */
 	INIT_WORK(&wq_data.worker, send_answer);
-	wq = create_singlethread_workqueue("myworkqueue"); 
-	if (!wq){
-		return -ENOMEM;
+	wq = create_singlethread_workqueue("myworkqueue");
+	if (!wq){ //If it is not possible to create the work queue
+		return -ENOMEM; //Return Error No kernel Memory
 	}
-	
-	/* socket to send data */
+
+	/* Create the socket to send data */
 	if (sock_create(PF_INET, SOCK_DGRAM, IPPROTO_UDP, &clientsocket) < 0) {
 		printk( KERN_ERR "server: Error creating clientsocket.n" );
 		return -EIO;
@@ -105,8 +108,8 @@ static int __init server_init( void )
 
 static void __exit server_exit( void )
 {
-	if (udpsocket)
-		sock_release(udpsocket);
+	if (recvsocket)
+		sock_release(recvsocket);
 	if (clientsocket)
 		sock_release(clientsocket);
 
